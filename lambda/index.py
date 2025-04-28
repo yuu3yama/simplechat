@@ -4,7 +4,7 @@ import os
 import boto3
 import re  # 正規表現モジュールをインポート
 from botocore.exceptions import ClientError
-
+import urllib.request
 
 # Lambda コンテキストからリージョンを抽出する関数
 def extract_region_from_arn(arn):
@@ -82,24 +82,49 @@ def lambda_handler(event, context):
         
         print("Calling Bedrock invoke_model API with payload:", json.dumps(request_payload))
         
+        # 宿題の回答 ## 開始 ##################################################################
+
         # invoke_model APIを呼び出し
-        response = bedrock_client.invoke_model(
-            modelId=MODEL_ID,
-            body=json.dumps(request_payload),
-            contentType="application/json"
-        )
+        #response = bedrock_client.invoke_model(
+        #    modelId=MODEL_ID,
+        #    body=json.dumps(request_payload),
+        #    contentType="application/json"
+        #)
         
         # レスポンスを解析
-        response_body = json.loads(response['body'].read())
-        print("Bedrock response:", json.dumps(response_body, default=str))
-        
-        # 応答の検証
-        if not response_body.get('output') or not response_body['output'].get('message') or not response_body['output']['message'].get('content'):
-            raise Exception("No response content from the model")
-        
-        # アシスタントの応答を取得
-        assistant_response = response_body['output']['message']['content'][0]['text']
-        
+        #response_body = json.loads(response['body'].read())
+        #print("Bedrock response:", json.dumps(response_body, default=str))
+
+        url = "https://fad7-34-74-76-254.ngrok-free.app/generate"
+
+        prompt_text = "\n".join(
+            f"{msg['role']}: {''.join(item['text'] for item in msg['content'])}"
+            for msg in bedrock_messages
+        )
+
+        payload = {
+            "prompt": prompt_text,
+            "max_new_tokens": 100,
+            "do_sample": True,
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+
+        print("Calling FastAPI:", json.dumps(payload))
+
+        data = json.dumps(payload).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+
+        try:
+            resp = urllib.request.urlopen(req)
+            response_body = json.load(resp)
+            assistant_response = response_body['generated_text']
+            print("✅ 生成結果:", response_body["generated_text"])
+        except Exception as e:
+            print("❌ エラー:", e)
+
+        # 宿題の回答 ## 終了 ##########################################################################
+
         # アシスタントの応答を会話履歴に追加
         messages.append({
             "role": "assistant",
